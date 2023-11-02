@@ -1,5 +1,7 @@
 package dslabs.paxos;
 
+import dslabs.atmostonce.AMOCommand;
+import dslabs.atmostonce.AMOResult;
 import dslabs.framework.Address;
 import dslabs.framework.Client;
 import dslabs.framework.Command;
@@ -17,6 +19,8 @@ public final class PaxosClient extends Node implements Client {
     private final Address[] servers;
 
     //TODO: declare fields for your implementation ...
+    private int currentSequenceNum = 0;
+    private Result result = null;
 
     /* -------------------------------------------------------------------------
         Construction and Initialization
@@ -39,18 +43,31 @@ public final class PaxosClient extends Node implements Client {
     @Override
     public synchronized void sendCommand(Command operation) {
         // TODO: send command ...
+        result = null;
+        Request request = null;
+        AMOCommand amoCommand;
+        for(Address server: servers){
+            amoCommand = new AMOCommand(operation, address(), currentSequenceNum);
+            request = new Request(amoCommand, currentSequenceNum);
+            send(request, server);
+        }
+        set(new ClientTimer(request), ClientTimer.CLIENT_RETRY_MILLIS);
     }
 
     @Override
     public synchronized boolean hasResult() {
         // TODO: check result available ...
-        return false;
+        return result != null;
     }
 
     @Override
     public synchronized Result getResult() throws InterruptedException {
         // TODO: get result ...
-        return null;
+        while (result == null) {
+            wait();
+        }
+
+        return result;
     }
 
     /* -------------------------------------------------------------------------
@@ -58,6 +75,15 @@ public final class PaxosClient extends Node implements Client {
        -----------------------------------------------------------------------*/
     private synchronized void handlePaxosReply(PaxosReply m, Address sender) {
         // TODO: handle paxos server reply ...
+
+        int sequenceNum = m.sequenceNum();
+        AMOResult amoResult = (AMOResult) m.result();
+        Result replyResult = amoResult.result();
+
+        if (result == null && sequenceNum == currentSequenceNum) {
+            result = replyResult;
+            notify();
+        }
     }
 
     /* -------------------------------------------------------------------------
@@ -65,5 +91,11 @@ public final class PaxosClient extends Node implements Client {
        -----------------------------------------------------------------------*/
     private synchronized void onClientTimer(ClientTimer t) {
         // TODO: handle client request timeout ...
+        if (result == null && t.request().requestNum() == currentSequenceNum) {
+            for(Address server: servers){
+                send(t.request(), server);
+            }
+            set(new ClientTimer(t.request()), ClientTimer.CLIENT_RETRY_MILLIS);
+        }
     }
 }

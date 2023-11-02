@@ -1,5 +1,6 @@
 package dslabs.paxos;
 
+import dslabs.atmostonce.AMOApplication;
 import dslabs.framework.Address;
 import dslabs.framework.Application;
 import dslabs.framework.Command;
@@ -7,12 +8,18 @@ import dslabs.framework.Node;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
 
+import java.util.ArrayList;
+import java.util.List;
+
 
 @ToString(callSuper = true)
 @EqualsAndHashCode(callSuper = true)
 public class PaxosServer extends Node {
     static final int INITIAL_BALLOT_NUMBER = 0;
     private final Address[] servers;
+    private AMOApplication<Application> app;
+    //for log slots/can be switched to different data structure i feel (a custom class)
+    List<Command> listOfCommands;
 
     // TODO: declare fields for your implementation ...
 
@@ -22,6 +29,7 @@ public class PaxosServer extends Node {
     public PaxosServer(Address address, Address[] servers, Application app) {
         super(address);
         this.servers = servers;
+        this.app = new AMOApplication<>(app);
 
         // TODO: wrap app inside AMOApplication ...
     }
@@ -30,6 +38,7 @@ public class PaxosServer extends Node {
     @Override
     public void init() {
         // TODO: initialize fields ...
+        listOfCommands = new ArrayList<>();
     }
 
 
@@ -69,7 +78,6 @@ public class PaxosServer extends Node {
      */
     public Command command(int logSlotNum) {
         // Your code here...
-        return null;
     }
 
     /**

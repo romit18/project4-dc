@@ -3,10 +3,10 @@ package dslabs.kvstore;
 import dslabs.framework.Application;
 import dslabs.framework.Command;
 import dslabs.framework.Result;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.NonNull;
-import lombok.ToString;
+import lombok.*;
+
+import java.util.HashMap;
+import java.util.Map;
 
 
 @ToString
@@ -61,31 +61,57 @@ public class KVStore implements Application {
         @NonNull private final String value;
     }
 
-    //TODO: declare fields for your implementation
+    @Getter private Map<String, String> map;
 
-    public KVStore() {}
+    public KVStore() {
+        map = new HashMap<>();
+    }
 
     // copy constructor
     public KVStore(KVStore application){
-        //TODO: a deepcopy constructor
-        //Hints: remember to deepcopy all fields, especially the mutable ones
+        map = new HashMap<>();
+        
+        for (Map.Entry<String, String> entry : application.map.entrySet()) {
+            map.put(entry.getKey(), entry.getValue());
+        }
     }
 
     @Override
     public KVStoreResult execute(Command command) {
         if (command instanceof Get) {
             Get g = (Get) command;
-            //TODO: get the value
+            String key = g.key();
+
+            if (!map.containsKey(key)) {
+                return new KeyNotFound();
+            }
+            
+            return new GetResult(map.get(key));
         }
 
         if (command instanceof Put) {
             Put p = (Put) command;
-            //TODO: put the value
+            String key = p.key();
+            String value = p.value();
+
+            map.put(key, value);
+
+            return new PutOk();
         }
 
         if (command instanceof Append) {
             Append a = (Append) command;
-            //TODO: append after previous
+            String key = a.key();
+            String value = a.value();
+
+            if (!map.containsKey(key)) {
+                map.put(key, value);
+            } else {
+                String oldValue = map.get(key);
+                map.put(key, oldValue + value);
+            }
+
+            return new AppendResult(map.get(key));
         }
 
         throw new IllegalArgumentException();
