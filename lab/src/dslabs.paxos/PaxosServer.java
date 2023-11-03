@@ -63,9 +63,13 @@ public class PaxosServer extends Node {
      */
     public PaxosLogSlotStatus status(int logSlotNum) {
         // Your code here...
-        if(logSlotNum > listOfCommands.size()){
-            return PaxosLogSlotStatus.ACCEPTED;
-        }else if(listOfCommands.contains(logSlotNum) && logSlotNum == listOfCommands.size()){
+        int index = logSlotNum - 1;
+        if(listOfCommands.isEmpty()){
+            return PaxosLogSlotStatus.EMPTY;
+        }
+        if(index > listOfCommands.size()){
+            return PaxosLogSlotStatus.CHOSEN;
+        }else if(logSlotNum == listOfCommands.size()){
             return PaxosLogSlotStatus.CHOSEN;
         }else if(listOfCommands.contains(logSlotNum) && logSlotNum < listOfCommands.size()){
             return PaxosLogSlotStatus.CLEARED;
@@ -88,8 +92,11 @@ public class PaxosServer extends Node {
      */
     public Command command(int logSlotNum) {
         // Your code here...
-        Command slotCommand = listOfCommands.get(logSlotNum).command();
-        return slotCommand;
+        PaxosLogSlotStatus status = status(logSlotNum);
+        if(status == PaxosLogSlotStatus.CLEARED || status == PaxosLogSlotStatus.EMPTY){
+            return null;
+        }
+        return listOfCommands.get(logSlotNum-1).command();
     }
 
     /**
@@ -102,10 +109,6 @@ public class PaxosServer extends Node {
      */
     public int firstNonCleared() {
         // Your code here...
-        for(int i = 0; i < listOfCommands.size(); i++){
-            if(listOfCommands.get(i) != null)
-                return i;
-        }
         return 1;
     }
 
@@ -118,11 +121,7 @@ public class PaxosServer extends Node {
      * @return the index in the log
      */
     public int lastNonEmpty() {
-        // Your code here...
-        for(int i = 0; i < listOfCommands.size(); i++){
-            if(listOfCommands.get(i) == null)
-                return i - 1;
-        }
+        // Your code here..
         return 0;
     }
 

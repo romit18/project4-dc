@@ -3,10 +3,12 @@ package dslabs.kvstore;
 import dslabs.framework.Application;
 import dslabs.framework.Command;
 import dslabs.framework.Result;
-import lombok.*;
-
+import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Map;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.NonNull;
+import lombok.ToString;
 
 
 @ToString
@@ -61,57 +63,44 @@ public class KVStore implements Application {
         @NonNull private final String value;
     }
 
-    @Getter private Map<String, String> map;
+    //TODO: declare fields for your implementation
+
+    private HashMap<String,String> keyValue;
 
     public KVStore() {
-        map = new HashMap<>();
+        keyValue = new HashMap<>();
     }
 
     // copy constructor
     public KVStore(KVStore application){
-        map = new HashMap<>();
-
-        for (Map.Entry<String, String> entry : application.map.entrySet()) {
-            map.put(entry.getKey(), entry.getValue());
-        }
+        this.keyValue = new HashMap<>();
+        this.keyValue.putAll(application.keyValue);
+        //TODO: a deepcopy constructor
+        //Hints: remember to deepcopy all fields, especially the mutable ones
     }
 
     @Override
     public KVStoreResult execute(Command command) {
         if (command instanceof Get) {
             Get g = (Get) command;
-            String key = g.key();
-
-            if (!map.containsKey(key)) {
-                return new KeyNotFound();
-            }
-
-            return new GetResult(map.get(key));
+            //TODO: get the value
+            if(keyValue.containsKey(g.key))
+                return new KVStore.GetResult(keyValue.get(g.key));
+            return new KeyNotFound();
         }
 
         if (command instanceof Put) {
             Put p = (Put) command;
-            String key = p.key();
-            String value = p.value();
-
-            map.put(key, value);
-
+            keyValue.put(p.key,p.value);
             return new PutOk();
+            //TODO: put the value
         }
 
         if (command instanceof Append) {
             Append a = (Append) command;
-            String key = a.key();
-            String value = a.value();
-
-            if (!map.containsKey(key)) {
-                map.put(key, value);
-            } else {
-                String oldValue = map.get(key);
-                map.put(key, oldValue + value);
-            }
-
-            return new AppendResult(map.get(key));
+            keyValue.put(a.key, keyValue.getOrDefault(a.key,"") + a.value);
+            return new AppendResult(keyValue.get(a.key));
+            //TODO: append after previous
         }
 
         throw new IllegalArgumentException();

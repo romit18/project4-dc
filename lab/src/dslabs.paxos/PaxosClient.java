@@ -45,10 +45,8 @@ public final class PaxosClient extends Node implements Client {
         // TODO: send command ...
         result = null;
         PaxosRequest request = null;
-        AMOCommand amoCommand;
         for(Address server: servers){
-            amoCommand = new AMOCommand(operation, address(), currentSequenceNum);
-            request = new PaxosRequest(this.address().toString(),currentSequenceNum,amoCommand);
+            request = new PaxosRequest(this.address().toString(),currentSequenceNum,operation);
             send(request, server);
         }
         set(new ClientTimer(request), ClientTimer.CLIENT_RETRY_MILLIS);

@@ -7,9 +7,6 @@ import dslabs.framework.Message;
 import dslabs.framework.Result;
 import lombok.Data;
 
-/* -------------------------------------------------------------------------
-    Primary-Backup Messages
-   -----------------------------------------------------------------------*/
 @Data
 class Request implements Message {
     private final Command command;
