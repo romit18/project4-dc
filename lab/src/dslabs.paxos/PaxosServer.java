@@ -1,10 +1,13 @@
 package dslabs.paxos;
 
 import dslabs.atmostonce.AMOApplication;
+import dslabs.atmostonce.AMOCommand;
+import dslabs.atmostonce.AMOResult;
 import dslabs.framework.Address;
 import dslabs.framework.Application;
 import dslabs.framework.Command;
 import dslabs.framework.Node;
+import dslabs.framework.Result;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
 
@@ -19,8 +22,8 @@ public class PaxosServer extends Node {
     private final Address[] servers;
     private AMOApplication<Application> app;
     //for log slots/can be switched to different data structure i feel (a custom class)
-    List<Command> listOfCommands;
-
+    List<AMOCommand> listOfCommands;
+    int latestValue = 0;
     // TODO: declare fields for your implementation ...
 
     /* -------------------------------------------------------------------------
@@ -60,7 +63,14 @@ public class PaxosServer extends Node {
      */
     public PaxosLogSlotStatus status(int logSlotNum) {
         // Your code here...
-        return null;
+        if(logSlotNum > listOfCommands.size()){
+            return PaxosLogSlotStatus.ACCEPTED;
+        }else if(listOfCommands.contains(logSlotNum) && logSlotNum == listOfCommands.size()){
+            return PaxosLogSlotStatus.CHOSEN;
+        }else if(listOfCommands.contains(logSlotNum) && logSlotNum < listOfCommands.size()){
+            return PaxosLogSlotStatus.CLEARED;
+        }
+        return PaxosLogSlotStatus.EMPTY;
     }
 
     /**
@@ -78,6 +88,8 @@ public class PaxosServer extends Node {
      */
     public Command command(int logSlotNum) {
         // Your code here...
+        Command slotCommand = listOfCommands.get(logSlotNum).command();
+        return slotCommand;
     }
 
     /**
@@ -90,6 +102,10 @@ public class PaxosServer extends Node {
      */
     public int firstNonCleared() {
         // Your code here...
+        for(int i = 0; i < listOfCommands.size(); i++){
+            if(listOfCommands.get(i) != null)
+                return i;
+        }
         return 1;
     }
 
@@ -103,6 +119,10 @@ public class PaxosServer extends Node {
      */
     public int lastNonEmpty() {
         // Your code here...
+        for(int i = 0; i < listOfCommands.size(); i++){
+            if(listOfCommands.get(i) == null)
+                return i - 1;
+        }
         return 0;
     }
 
@@ -111,10 +131,29 @@ public class PaxosServer extends Node {
        -----------------------------------------------------------------------*/
     private void handlePaxosRequest(PaxosRequest m, Address sender) {
         // TODO: handle paxos request ...
+        AMOCommand amoCommand = new AMOCommand(m.command(), sender, m.sequenceNum());
+        AMOResult amoResult = (AMOResult) app.execute(amoCommand);
+        PaxosReply reply = new PaxosReply(this.address().toString(), m.sequenceNum(), amoResult);
+        listOfCommands.add(amoCommand);
+        this.send(reply, sender);
     }
 
     // TODO: your message handlers ...
+    private void handleProposer(PaxosRequest m){
+        int count = 0;
+        for(int i = 0; i < servers.length; i++) {
+            this.send(m, servers[i]);
+        }
+    }
 
+    private void handleAcceptor(PaxosRequest m, Address serverAddress) {
+        Promise acceptorPromise = null;
+        if (m.sequenceNum() > latestValue) {
+            latestValue = m.sequenceNum();
+            acceptorPromise = new Promise(latestValue);
+        }
+        this.send(acceptorPromise, serverAddress);
+    }
 
     /* -------------------------------------------------------------------------
         Timer Handlers

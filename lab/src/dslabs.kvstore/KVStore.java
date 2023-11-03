@@ -70,7 +70,7 @@ public class KVStore implements Application {
     // copy constructor
     public KVStore(KVStore application){
         map = new HashMap<>();
-        
+
         for (Map.Entry<String, String> entry : application.map.entrySet()) {
             map.put(entry.getKey(), entry.getValue());
         }
@@ -85,7 +85,7 @@ public class KVStore implements Application {
             if (!map.containsKey(key)) {
                 return new KeyNotFound();
             }
-            
+
             return new GetResult(map.get(key));
         }
 

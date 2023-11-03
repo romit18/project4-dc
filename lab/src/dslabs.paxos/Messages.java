@@ -7,12 +7,6 @@ import dslabs.framework.Message;
 import dslabs.framework.Result;
 import lombok.Data;
 
-import java.util.Queue;
-
-@Data
-class Ping implements Message {
-    private final int viewNum;
-}
 /* -------------------------------------------------------------------------
     Primary-Backup Messages
    -----------------------------------------------------------------------*/
@@ -26,4 +20,9 @@ class Request implements Message {
 class Reply implements Message {
     private final Result result;
     private final int replyNum;
+}
+
+@Data
+class Promise implements Message {
+    private final int promiseNum;
 }

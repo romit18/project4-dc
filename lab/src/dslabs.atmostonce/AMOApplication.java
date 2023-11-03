@@ -46,7 +46,7 @@ public final class AMOApplication<T extends Application>
             throws NoSuchMethodException, IllegalAccessException, InvocationTargetException, InstantiationException {
         Application application = amoApplication.application();
         this.application = (T) application.getClass().getConstructor(application.getClass()).newInstance(application);
-        
+
         for (Map.Entry<Address, Pair<Integer, AMOResult>> entry : amoApplication.sequenceNums.entrySet()) {
             Address address = entry.getKey();
             Pair<Integer, AMOResult> pair = entry.getValue();

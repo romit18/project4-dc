@@ -28,7 +28,7 @@ public final class PaxosClient extends Node implements Client {
     public PaxosClient(Address address, Address[] servers) {
         super(address);
         this.servers = servers;
-        
+
         // TODO: initialize fields ...
     }
 
@@ -44,11 +44,11 @@ public final class PaxosClient extends Node implements Client {
     public synchronized void sendCommand(Command operation) {
         // TODO: send command ...
         result = null;
-        Request request = null;
+        PaxosRequest request = null;
         AMOCommand amoCommand;
         for(Address server: servers){
             amoCommand = new AMOCommand(operation, address(), currentSequenceNum);
-            request = new Request(amoCommand, currentSequenceNum);
+            request = new PaxosRequest(this.address().toString(),currentSequenceNum,amoCommand);
             send(request, server);
         }
         set(new ClientTimer(request), ClientTimer.CLIENT_RETRY_MILLIS);
@@ -91,7 +91,7 @@ public final class PaxosClient extends Node implements Client {
        -----------------------------------------------------------------------*/
     private synchronized void onClientTimer(ClientTimer t) {
         // TODO: handle client request timeout ...
-        if (result == null && t.request().requestNum() == currentSequenceNum) {
+        if (result == null && t.request().sequenceNum() == currentSequenceNum) {
             for(Address server: servers){
                 send(t.request(), server);
             }
