@@ -11,19 +11,22 @@ import dslabs.framework.Result;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 
 @ToString(callSuper = true)
 @EqualsAndHashCode(callSuper = true)
 public class PaxosServer extends Node {
     static final int INITIAL_BALLOT_NUMBER = 0;
-    private final Address[] servers;
+    private final Address[] leaders;
     private AMOApplication<Application> app;
-    //for log slots/can be switched to different data structure i feel (a custom class)
-    List<AMOCommand> listOfCommands;
-    int latestValue = 0;
+    Address leader;
+    Map<Integer, Command> proposals = new HashMap<Integer, Command>();
+    Map<Integer, Command> decisions = new HashMap<Integer, Command>();
+    Set<Pvalue> accepted = new HashSet<>();
+    int slot = 1;
+    boolean active = false;
+    Ballot ballot;
     // TODO: declare fields for your implementation ...
 
     /* -------------------------------------------------------------------------
@@ -31,7 +34,7 @@ public class PaxosServer extends Node {
        -----------------------------------------------------------------------*/
     public PaxosServer(Address address, Address[] servers, Application app) {
         super(address);
-        this.servers = servers;
+        this.leaders = servers;
         this.app = new AMOApplication<>(app);
 
         // TODO: wrap app inside AMOApplication ...
@@ -41,7 +44,7 @@ public class PaxosServer extends Node {
     @Override
     public void init() {
         // TODO: initialize fields ...
-        listOfCommands = new ArrayList<>();
+        ballot = new Ballot(INITIAL_BALLOT_NUMBER, this.address());
     }
 
 
@@ -63,18 +66,16 @@ public class PaxosServer extends Node {
      */
     public PaxosLogSlotStatus status(int logSlotNum) {
         // Your code here...
-        int index = logSlotNum - 1;
-        if(listOfCommands.isEmpty()){
+        if(!proposals.containsKey(logSlotNum)){
             return PaxosLogSlotStatus.EMPTY;
         }
-        if(index > listOfCommands.size()){
-            return PaxosLogSlotStatus.CHOSEN;
-        }else if(logSlotNum == listOfCommands.size()){
-            return PaxosLogSlotStatus.CHOSEN;
-        }else if(listOfCommands.contains(logSlotNum) && logSlotNum < listOfCommands.size()){
+        if(proposals.containsKey(logSlotNum) && proposals.get(logSlotNum) == null){
             return PaxosLogSlotStatus.CLEARED;
         }
-        return PaxosLogSlotStatus.EMPTY;
+        if(decisions.containsKey(logSlotNum) && decisions.get(logSlotNum) != null){
+            return PaxosLogSlotStatus.ACCEPTED;
+        }
+        return PaxosLogSlotStatus.CHOSEN;
     }
 
     /**
@@ -96,7 +97,7 @@ public class PaxosServer extends Node {
         if(status == PaxosLogSlotStatus.CLEARED || status == PaxosLogSlotStatus.EMPTY){
             return null;
         }
-        return listOfCommands.get(logSlotNum-1).command();
+        return proposals.get(logSlotNum);
     }
 
     /**
@@ -109,6 +110,11 @@ public class PaxosServer extends Node {
      */
     public int firstNonCleared() {
         // Your code here...
+        for(Map.Entry<Integer, Command> prop: proposals.entrySet()){
+            if(prop.getValue() != null){
+                return prop.getKey();
+            }
+        }
         return 1;
     }
 
@@ -122,6 +128,9 @@ public class PaxosServer extends Node {
      */
     public int lastNonEmpty() {
         // Your code here..
+        if(!proposals.isEmpty()){
+            return slot-1;
+        }
         return 0;
     }
 
@@ -130,28 +139,97 @@ public class PaxosServer extends Node {
        -----------------------------------------------------------------------*/
     private void handlePaxosRequest(PaxosRequest m, Address sender) {
         // TODO: handle paxos request ...
+        propose(m.command());
         AMOCommand amoCommand = new AMOCommand(m.command(), sender, m.sequenceNum());
         AMOResult amoResult = (AMOResult) app.execute(amoCommand);
-        PaxosReply reply = new PaxosReply(this.address().toString(), m.sequenceNum(), amoResult);
-        listOfCommands.add(amoCommand);
-        this.send(reply, sender);
+        send(new PaxosReply(this.address().toString(), m.sequenceNum(), amoResult), sender);
+    }
+
+    private void propose(Command c){
+        if(!decisions.containsValue(c)){
+            for(int i = 1;;i++){
+                if(!proposals.containsKey(i) && !decisions.containsKey(i)){
+                    proposals.put(i, c);
+                    //remove later
+                    slot++;
+                    for(Address address: leaders){
+                        send(new ProposeMessage(i, c), address);
+                    }
+                    break;
+                }
+            }
+        }
     }
 
     // TODO: your message handlers ...
-    private void handleProposer(PaxosRequest m){
-        int count = 0;
-        for(int i = 0; i < servers.length; i++) {
-            this.send(m, servers[i]);
+    private void handleProposeMessage(ProposeMessage m, Address sender){
+        if(!proposals.containsKey(m.slot_number())){
+            proposals.put(m.slot_number(), m.command());
+//            if(active){
+//                P2aMessage m2 = new P2aMessage(this.address(), ballot, m.slot_number(), m.command());
+//                Set<Address> waitfor = new HashSet<>();
+//                for(Address a: leaders){
+//                    send(m2, a);
+//                    waitfor.add(a);
+//                }
+//
+//                while(2*waitfor.size()>=leaders.length){
+//
+//                }
+//
+//            }
         }
     }
 
-    private void handleAcceptor(PaxosRequest m, Address serverAddress) {
-        Promise acceptorPromise = null;
-        if (m.sequenceNum() > latestValue) {
-            latestValue = m.sequenceNum();
-            acceptorPromise = new Promise(latestValue);
+    private void handleP1aMessage(P1aMessage m, Address sender){
+        if(ballot == null || ballot.compareTo(m.ballot()) < 0){
+            ballot = m.ballot;
         }
-        this.send(acceptorPromise, serverAddress);
+        send(new P1bMessage(m.address, ballot, new HashSet<>(accepted)), m.address);
+    }
+
+    private void handleP2aMessage(P2aMessage m, Address sender){
+        if(ballot == null || ballot.compareTo(m.ballot()) <= 0){
+            ballot = m.ballot;
+            accepted.add(new Pvalue(ballot, m.slot(), m.paxosRequest()));
+        }
+        send(new P2bMessage(m.address, ballot, m.slot(), m.paxosRequest()), m.address);
+    }
+
+    private void handleP2bMessage(P2bMessage m, Address sender){
+        if(ballot.equals(m.ballot())){
+            ballot = m.ballot;
+            accepted.add(new Pvalue(ballot, m.slot(), m.paxosRequest));
+        }
+        send(new P2bMessage(m.address, ballot, m.slot(), m.paxosRequest), m.address);
+    }
+
+    private void handleDecisionMessage(DecisionMessage m, Address sender){
+        decisions.put(m.slot, m.command);
+        for(;;){
+            Command c = decisions.get(slot);
+            if(c == null){
+                break;
+            }
+            Command c2 = proposals.get(slot);
+            if(c2 != null && !c2.equals(c)){
+                propose(c2);
+            }
+            perform(c);
+        }
+    }
+
+    private void perform(Command c){
+        for(int s = 1; s<slot;s++){
+            if(c.equals(decisions.get(s))){
+                slot++;
+                return;
+            }
+        }
+        slot++;
+    }
+
+    private void handleAcceptor(PaxosRequest m, Address serverAddress) {
     }
 
     /* -------------------------------------------------------------------------

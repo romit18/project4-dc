@@ -64,7 +64,6 @@ public final class PaxosClient extends Node implements Client {
         while (result == null) {
             wait();
         }
-
         return result;
     }
 
@@ -80,6 +79,7 @@ public final class PaxosClient extends Node implements Client {
 
         if (result == null && sequenceNum == currentSequenceNum) {
             result = replyResult;
+            currentSequenceNum++;
             notify();
         }
     }
