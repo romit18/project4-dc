@@ -370,7 +370,7 @@ public class PaxosTest extends BaseJUnitTest {
         client.getResult();
     }
 
-    @Test(timeout = 30 * 1000)
+    @Test(timeout = 5 * 1000)
     @PrettyTestName("Single client, simple operations")
     @Category(RunTests.class)
     @TestPointValue(5)
