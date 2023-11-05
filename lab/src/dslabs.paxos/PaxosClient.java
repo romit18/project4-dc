@@ -89,6 +89,7 @@ public final class PaxosClient extends Node implements Client {
        -----------------------------------------------------------------------*/
     private synchronized void onClientTimer(ClientTimer t) {
         // TODO: handle client request timeout ...
+
         if (result == null && t.request().sequenceNum() == currentSequenceNum) {
             for(Address server: servers){
                 send(t.request(), server);

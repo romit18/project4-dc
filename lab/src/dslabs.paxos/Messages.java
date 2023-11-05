@@ -77,17 +77,17 @@ class AdoptedMessage implements Message {
 class DecisionMessage implements Message {
     final Address address;
     final int slot;
-    final Command command;
+    final PaxosRequest paxosRequest;
 }
 
 @Data
 class RequestMessage implements Message {
     final Address address;
-    private final Command command;
+    private final PaxosRequest paxosRequest;
 }
 
 @Data
 class ProposeMessage implements Message {
     private final int slot_number;
-    private final Command command ;
+    private final PaxosRequest paxosRequest ;
 }
