@@ -32,7 +32,7 @@ public class PaxosServer extends Node {
     Ballot ballot;
     int countOfRequests = 0;
     Map<Integer, Integer> slotToDecisionMap = new HashMap<>();
-    int slotExecuted = 0;
+    int slotExecuted = 1;
     // TODO: declare fields for your implementation ...
 
     /* -------------------------------------------------------------------------
@@ -53,7 +53,7 @@ public class PaxosServer extends Node {
 
         ballot = new Ballot(INITIAL_BALLOT_NUMBER, this.address());
         leader = ballot.address();
-        set(new HeartbeatCheckTimer(this.address()), HeartbeatCheckTimer.PING_CHECK_MILLIS);
+        set(new HeartbeatCheckTimer(ballot), HeartbeatCheckTimer.PING_CHECK_MILLIS);
         set(new HeartbeatTimer(), HeartbeatTimer.HEARTBEAT_MILLIS);
 
     }
@@ -259,30 +259,28 @@ public class PaxosServer extends Node {
     }
 
     private void handleDecisionMessage(DecisionMessage m, Address sender){
-        if(leader.equals(this.address())){
-            decisions.put(m.slot, m.paxosRequest);
-            for(;;){
-                PaxosRequest c = decisions.get(slot);
-                if(c == null){
-                    break;
-                }
-                PaxosRequest c2 = proposals.get(slot);
-                if(c2 != null && !c2.equals(c)){
-                    propose(c2);
-                }
-                perform(c);
-                if(slot > slotDone){
-                    AMOCommand amoCommand = new AMOCommand(c.command(), sender, c.sequenceNum());
-                    AMOResult amoResult = (AMOResult) app.execute(amoCommand);
-                    send(new PaxosReply(this.address().toString(), c.sequenceNum(), amoResult), clientAddress);
-                    slotDone = slot;
-                }
+        decisions.put(m.slot, m.paxosRequest);
+        for(;;){
+            PaxosRequest c = decisions.get(slot);
+            if(c == null){
+                break;
+            }
+            PaxosRequest c2 = proposals.get(slot);
+            if(c2 != null && !c2.equals(c)){
+                propose(c2);
+            }
+            perform(c);
+            if(slot > slotDone){
+                AMOCommand amoCommand = new AMOCommand(c.command(), sender, c.sequenceNum());
+                AMOResult amoResult = (AMOResult) app.execute(amoCommand);
+                send(new PaxosReply(this.address().toString(), c.sequenceNum(), amoResult), clientAddress);
+                slotDone = slot;
             }
         }
     }
 
     private void perform(PaxosRequest paxosRequest){
-        for(int s = 1; s<slot;s++){
+        for(int s = 1; s<=slot;s++){
             if(paxosRequest.equals(decisions.get(s))){
                 slot++;
                 return;
@@ -318,7 +316,7 @@ public class PaxosServer extends Node {
     private void handleHeartbeat(Heartbeat m, Address sender) {
         if(!this.address().equals(m.ballot().address())){
             send(new HeartbeatReply(slot, m.ballot()), sender);
-            for(int i = 1; i<m.slotExecuted();i++){
+            for(int i = 1; i<=Math.min(decisions.size(), slotExecuted);i++){
                 decisions.put(i, null);
             }
         }
@@ -327,8 +325,8 @@ public class PaxosServer extends Node {
     private void handleHeartbeatReply(HeartbeatReply m, Address sender) {
         if(m.slot() > 1){
             slotToDecisionMap.put(m.slot()-1, slotToDecisionMap.getOrDefault(m.slot()-1, 0) + 1);
-            if(2*slotToDecisionMap.get(m.slot()-1) >= leaders.length){
-                slotExecuted = m.slot();
+            if(m.slot() - 1 > slotExecuted){
+                slotExecuted = m.slot() - 1;
             }
         }
     }
@@ -339,10 +337,10 @@ public class PaxosServer extends Node {
     // TODO: your time handlers ...
     private synchronized void onHeartbeatCheckTimer(HeartbeatCheckTimer t) {
         // TODO: handle client request timeout ...
-        if (!t.leader().equals(ballot.address())) {
+        if (!t.leader().address().equals(ballot.address())) {
             countOfRequests++;
             if(countOfRequests == 2){
-                send(new P1aMessage(this.address(), new Ballot(ballot.sequenceNum() + 1, this.address())), ballot.address());
+                send(new P1aMessage(this.address(), new Ballot(t.leader().sequenceNum() + 1, this.address())), ballot.address());
                 countOfRequests = 0;
                 return;
             }

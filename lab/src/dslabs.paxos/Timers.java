@@ -13,13 +13,13 @@ final class ClientTimer implements Timer {
 
 @Data
 final class HeartbeatCheckTimer implements Timer {
-    static final int PING_CHECK_MILLIS = 100;
-    private final Address leader;
+    static final int PING_CHECK_MILLIS = 10;
+    private final Ballot leader;
 }
 
 @Data
 final class HeartbeatTimer implements Timer {
-    static final int HEARTBEAT_MILLIS = 50;
+    static final int HEARTBEAT_MILLIS = 2;
 }
 
 // TODO: add more timers here ...
