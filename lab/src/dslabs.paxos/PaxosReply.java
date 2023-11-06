@@ -10,7 +10,8 @@ import lombok.Data;
 
 @Data
 public final class PaxosReply implements Message {
+    private final boolean success;
     private final String id;
-    private final int sequenceNum;
+    private final int replyID;
     private final Result result;
 }

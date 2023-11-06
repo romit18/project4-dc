@@ -69,6 +69,6 @@ import lombok.Data;
 @Data
 public final class PaxosRequest implements Message {
     private final String id;
-    private final int sequenceNum;
+    private final int requestID;
     private final Command command;
 }

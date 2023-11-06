@@ -85,7 +85,7 @@ public class KVStore implements Application {
             Get g = (Get) command;
             //TODO: get the value
             if(keyValue.containsKey(g.key))
-                return new KVStore.GetResult(keyValue.get(g.key));
+                return new GetResult(keyValue.get(g.key));
             return new KeyNotFound();
         }
 

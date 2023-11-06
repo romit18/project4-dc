@@ -6,12 +6,11 @@ import lombok.Data;
 
 @Data
 public final class AMOCommand implements Command {
-    private final Command command;
-    private final Address clientAddress;
-    private final int sequenceNum;
+    //TODO: implement your wrapper for command
 
-    @Override
-    public boolean readOnly() {
-        return command.readOnly();
-    }
+    private final Command command;
+    private final Address sender;
+    private final int seqNum;
+
+    //Hints: think carefully about what information is required for server to check duplication
 }

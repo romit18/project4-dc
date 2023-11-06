@@ -1,105 +1,68 @@
 package dslabs.paxos;
 
 
-// TODO: add messages for PAXOS here ...
 import dslabs.framework.Address;
-import dslabs.framework.Command;
 import dslabs.framework.Message;
-import dslabs.framework.Result;
+import java.io.Serializable;
+import java.util.HashSet;
+import java.util.SortedMap;
+import java.util.TreeMap;
+import lombok.AllArgsConstructor;
 import lombok.Data;
 
-import java.util.Set;
-
+@AllArgsConstructor
 @Data
-class Request implements Message {
-    private final Command command;
-    private final int requestNum;
+class LogEntry implements Serializable {
+    /* FINAL */
+    private final int ballotNumber;
+    private final Address client;
+    private final PaxosRequest request;
+
+    /* NON-FINAL */
+    private PaxosReply reply;
+    private boolean isCommitted;
+
+    public void setReply(PaxosReply replyParam) {
+        this.reply = replyParam;
+    }
 }
 
 @Data
-class Reply implements Message {
-    private final Result result;
-    private final int replyNum;
-}
-
-@Data
-class Promise implements Message {
-    private final int promiseNum;
-}
-
-@Data
-class PaxosMessage implements Message {
-    final Address address;
-}
-@Data
-class P1aMessage implements Message {
-    final Address address;
-    final Ballot ballot;
-}
-
-@Data
-class P1bMessage implements Message {
-    final Address address;
-    final Ballot ballot;
-    final Set<Pvalue> accepted;
-}
-
-@Data
-class P2aMessage implements Message {
-    final Address address;
-    final Ballot ballot;
+@AllArgsConstructor
+class RequestAndSlot implements Serializable {
+    private final PaxosRequest request;
     private final int slot;
-    private final PaxosRequest paxosRequest;
 }
 
 @Data
-class P2bMessage implements Message {
-    final Address address;
-    final Ballot ballot;
-    final int slot;
-    final PaxosRequest paxosRequest;
+@AllArgsConstructor
+class Phase1A implements Message {
+    private final int ballotNumber;
 }
 
 @Data
-class PreemptedMessage implements Message {
-    final Address address;
-    final Ballot ballot;
+@AllArgsConstructor
+class Phase1B implements Message {
+    private final boolean voteGranted;
+    private final int ballotNumber;
+    private final TreeMap<Integer, LogEntry> logEntries;
+    private final int lastExecutedIndex;
 }
 
 @Data
-class AdoptedMessage implements Message {
-    final Address address;
-    final Ballot ballot;
-    final Set <Pvalue> accepted;
+@AllArgsConstructor
+class Heartbeat implements Message {
+    private final int ballotNumber;
+    private final int sequenceId;
+    private final int pruneTill;
+    private final SortedMap<Integer, LogEntry> subLogEntries;
 }
 
 @Data
-class DecisionMessage implements Message {
-    final Address address;
-    final int slot;
-    final PaxosRequest paxosRequest;
-}
-
-@Data
-class RequestMessage implements Message {
-    final Address address;
-    private final PaxosRequest paxosRequest;
-}
-
-@Data
-class ProposeMessage implements Message {
-    private final int slot_number;
-    private final PaxosRequest paxosRequest ;
-}
-
-@Data
-class Heartbeat implements Message{
-    private final Ballot ballot;
-    private final int slotExecuted;
-}
-
-@Data
-class HeartbeatReply implements Message{
-    private final int slot;
-    private final Ballot ballot;
+@AllArgsConstructor
+class HeartbeatReply implements Message {
+    private final boolean success;
+    private final int ballotNumber;
+    private final int sequenceId;
+    private final int lastExecutedIndex;
 }

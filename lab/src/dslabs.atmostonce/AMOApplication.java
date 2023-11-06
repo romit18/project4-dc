@@ -4,41 +4,66 @@ import dslabs.framework.Address;
 import dslabs.framework.Application;
 import dslabs.framework.Command;
 import dslabs.framework.Result;
-import lombok.*;
-import org.apache.commons.lang3.tuple.Pair;
-
+import java.io.Serializable;
 import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
+import lombok.ToString;
 import java.util.Map;
 
+@Getter
 @EqualsAndHashCode
 @ToString
 @RequiredArgsConstructor
 public final class AMOApplication<T extends Application>
         implements Application {
-    @Getter @NonNull private final T application;
+    @NonNull private final T application;
 
-    Map<Address, Pair<Integer, AMOResult>> sequenceNums = new HashMap<>();
+    //TODO: declare fields for your implementation
+    @NonNull
+    private Map<Address, CachedRequest> senderToReqCache = new HashMap<>();
+
+    @Data
+    @AllArgsConstructor
+    public static class CachedRequest implements Serializable {
+        private final int seqNum;
+        private final AMOResult result;
+    }
 
     @Override
     public AMOResult execute(Command command) {
         if (!(command instanceof AMOCommand)) {
             throw new IllegalArgumentException();
         }
-
         AMOCommand amoCommand = (AMOCommand) command;
-        Address clientAddress = amoCommand.clientAddress();
-        int sequenceNum = amoCommand.sequenceNum();
-        if (alreadyExecuted(amoCommand)) {
-            Pair<Integer, AMOResult> pair = sequenceNums.get(clientAddress);
-            return pair.getRight();
+
+        if (senderToReqCache.containsKey(amoCommand.sender())) {
+            CachedRequest cachedReq = senderToReqCache.get(amoCommand.sender());
+            if (amoCommand.seqNum() == cachedReq.seqNum()) {
+                return cachedReq.result();
+            } else if (amoCommand.seqNum() < cachedReq.seqNum()) {
+                return new AMOResult(null);
+            }
         }
 
-        Result result = application.execute(amoCommand.command());
+        /*
+         Since the tests do not call `sendCommand` twice in a row without getting a result back, we can ignore the case when a request is ongoing and the same request is sent again by the server.
+         */
+        Result result = this.application.execute(amoCommand.command());
         AMOResult amoResult = new AMOResult(result);
-        sequenceNums.put(clientAddress, Pair.of(sequenceNum, amoResult));
+        senderToReqCache.put(amoCommand.sender(), new CachedRequest(amoCommand.seqNum(), amoResult));
 
-        return new AMOResult(result);
+        return amoResult;
+
+
+        //TODO: execute the command
+        //Hints: remember to check whether the command is executed before and update records
+//        return null;
     }
 
     // copy constructor
@@ -46,15 +71,10 @@ public final class AMOApplication<T extends Application>
             throws NoSuchMethodException, IllegalAccessException, InvocationTargetException, InstantiationException {
         Application application = amoApplication.application();
         this.application = (T) application.getClass().getConstructor(application.getClass()).newInstance(application);
-
-        for (Map.Entry<Address, Pair<Integer, AMOResult>> entry : amoApplication.sequenceNums.entrySet()) {
-            Address address = entry.getKey();
-            Pair<Integer, AMOResult> pair = entry.getValue();
-
-            Integer cSequenceNum = new Integer(pair.getLeft());
-            AMOResult cAmoResult = new AMOResult(pair.getRight().result().getClass().getConstructor(pair.getRight().result().getClass()).newInstance(pair.getRight().result()));
-            sequenceNums.put(address, Pair.of(cSequenceNum, cAmoResult));
-        }
+        //TODO: a deepcopy constructor
+        this.senderToReqCache.putAll(amoApplication.senderToReqCache);
+        // Copy cache
+        //Hints: remember to deepcopy all fields, especially the mutable ones
     }
 
     public Result executeReadOnly(Command command) {
@@ -75,15 +95,10 @@ public final class AMOApplication<T extends Application>
         }
 
         AMOCommand amoCommand = (AMOCommand) command;
-        Address clientAddress = amoCommand.clientAddress();
-        int sequenceNum = amoCommand.sequenceNum();
-
-        if (!sequenceNums.containsKey(clientAddress)) {
-            return false;
-        }
-        Pair<Integer, AMOResult> pair = sequenceNums.get(clientAddress);
-        int lastSequenceNum = pair.getLeft();
-
-        return sequenceNum <= lastSequenceNum;
+        return senderToReqCache.containsKey(amoCommand.sender()) &&
+                senderToReqCache.get(amoCommand.sender()).seqNum ==
+                        amoCommand.seqNum();
+        
+        //TODO: check whether the amoCommand is already executed or not
     }
 }
