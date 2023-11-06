@@ -81,12 +81,12 @@ public class PaxosServer extends Node {
             return PaxosLogSlotStatus.EMPTY;
         }
         if(decisions.containsKey(logSlotNum) && decisions.get(logSlotNum) != null){
-            return PaxosLogSlotStatus.ACCEPTED;
+            return PaxosLogSlotStatus.CHOSEN;
         }
         if(decisions.containsKey(logSlotNum) && decisions.get(logSlotNum) == null){
             return PaxosLogSlotStatus.CLEARED;
         }
-        return PaxosLogSlotStatus.CHOSEN;
+        return PaxosLogSlotStatus.ACCEPTED;
     }
 
     /**
@@ -275,6 +275,7 @@ public class PaxosServer extends Node {
                 AMOResult amoResult = (AMOResult) app.execute(amoCommand);
                 send(new PaxosReply(this.address().toString(), c.sequenceNum(), amoResult), clientAddress);
                 slotDone = slot;
+                slotExecuted = slot;
             }
         }
     }
@@ -314,12 +315,10 @@ public class PaxosServer extends Node {
     }
 
     private void handleHeartbeat(Heartbeat m, Address sender) {
-        if(!this.address().equals(m.ballot().address())){
-            send(new HeartbeatReply(slot, m.ballot()), sender);
-            for(int i = 1; i<=Math.min(decisions.size(), slotExecuted);i++){
-                decisions.put(i, null);
-            }
+        for(int i = 1; i<=slotExecuted;i++){
+            decisions.put(i, null);
         }
+        send(new HeartbeatReply(slot, m.ballot()), sender);
     }
 
     private void handleHeartbeatReply(HeartbeatReply m, Address sender) {
