@@ -91,3 +91,15 @@ class ProposeMessage implements Message {
     private final int slot_number;
     private final PaxosRequest paxosRequest ;
 }
+
+@Data
+class Heartbeat implements Message{
+    private final Ballot ballot;
+    private final int slotExecuted;
+}
+
+@Data
+class HeartbeatReply implements Message{
+    private final int slot;
+    private final Ballot ballot;
+}

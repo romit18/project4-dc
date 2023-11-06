@@ -24,13 +24,15 @@ public class PaxosServer extends Node {
     Map<Integer, PaxosRequest> proposals = new HashMap<Integer, PaxosRequest>();
     Map<Integer, PaxosRequest> decisions = new HashMap<Integer, PaxosRequest>();
     Set<Pvalue> accepted = new HashSet<>();
-
+    int slotDone = 0;
     Address clientAddress;
-
     Set <Address> waitfor = new HashSet <Address>();
     int slot = 1;
     boolean active = false;
     Ballot ballot;
+    int countOfRequests = 0;
+    Map<Integer, Integer> slotToDecisionMap = new HashMap<>();
+    int slotExecuted = 0;
     // TODO: declare fields for your implementation ...
 
     /* -------------------------------------------------------------------------
@@ -48,8 +50,11 @@ public class PaxosServer extends Node {
     @Override
     public void init() {
         // TODO: initialize fields ...
-        ballot = new Ballot(INITIAL_BALLOT_NUMBER, this.address());
 
+        ballot = new Ballot(INITIAL_BALLOT_NUMBER, this.address());
+        leader = ballot.address();
+        set(new HeartbeatCheckTimer(this.address()), HeartbeatCheckTimer.PING_CHECK_MILLIS);
+        set(new HeartbeatTimer(), HeartbeatTimer.HEARTBEAT_MILLIS);
 
     }
 
@@ -72,14 +77,14 @@ public class PaxosServer extends Node {
      */
     public PaxosLogSlotStatus status(int logSlotNum) {
         // Your code here...
-        if(!proposals.containsKey(logSlotNum)){
+        if(!decisions.containsKey(logSlotNum)){
             return PaxosLogSlotStatus.EMPTY;
-        }
-        if(proposals.containsKey(logSlotNum) && proposals.get(logSlotNum) == null){
-            return PaxosLogSlotStatus.CLEARED;
         }
         if(decisions.containsKey(logSlotNum) && decisions.get(logSlotNum) != null){
             return PaxosLogSlotStatus.ACCEPTED;
+        }
+        if(decisions.containsKey(logSlotNum) && decisions.get(logSlotNum) == null){
+            return PaxosLogSlotStatus.CLEARED;
         }
         return PaxosLogSlotStatus.CHOSEN;
     }
@@ -103,7 +108,7 @@ public class PaxosServer extends Node {
         if(status == PaxosLogSlotStatus.CLEARED || status == PaxosLogSlotStatus.EMPTY){
             return null;
         }
-        return proposals.get(logSlotNum).command();
+        return decisions.get(logSlotNum).command();
     }
 
     /**
@@ -116,7 +121,7 @@ public class PaxosServer extends Node {
      */
     public int firstNonCleared() {
         // Your code here...
-        for(Map.Entry<Integer, PaxosRequest> prop: proposals.entrySet()){
+        for(Map.Entry<Integer, PaxosRequest> prop: decisions.entrySet()){
             if(prop.getValue() != null){
                 return prop.getKey();
             }
@@ -134,7 +139,7 @@ public class PaxosServer extends Node {
      */
     public int lastNonEmpty() {
         // Your code here..
-        if(!proposals.isEmpty()){
+        if(!decisions.isEmpty()){
             return slot-1;
         }
         return 0;
@@ -145,9 +150,10 @@ public class PaxosServer extends Node {
        -----------------------------------------------------------------------*/
     private void handlePaxosRequest(PaxosRequest m, Address sender) {
         // TODO: handle paxos request ...
-        if(!proposals.containsValue(m)){
-            propose(m);
-        }
+        propose(m);
+//        if(!proposals.containsValue(m)){
+//
+//        }
         this.clientAddress = sender;
 //        if(slot == m.sequenceNum() + 1 && decisions.containsValue(m)) {
 //            AMOCommand amoCommand = new AMOCommand(m.command(), sender, m.sequenceNum());
@@ -161,7 +167,10 @@ public class PaxosServer extends Node {
             for(int i = 1;;i++){
                 if(!proposals.containsKey(i) && !decisions.containsKey(i)){
                     proposals.put(i, m);
-                    send(new ProposeMessage(i, m), ballot.address());
+                    for(Address address: leaders){
+                        if(!this.address().equals(address))
+                            send(new ProposeMessage(i, m), address);
+                    }
                     break;
                 }
             }
@@ -198,12 +207,12 @@ public class PaxosServer extends Node {
 
     private void handleP1bMessage(P1bMessage m, Address sender){
         Set<Pvalue> pvalues = new HashSet<Pvalue>();
+        int cmp = ballot.compareTo(m.ballot);
+        if (cmp != 0) {
+            send(new PreemptedMessage(this.address(), m.ballot), ballot.address());
+            return;
+        }
         if(2 * waitfor.size() >= leaders.length) {
-            int cmp = ballot.compareTo(m.ballot);
-            if (cmp != 0) {
-                send(new PreemptedMessage(this.address(), m.ballot), ballot.address());
-                return;
-            }
             if (waitfor.contains(m.address)) {
                 waitfor.remove(m.address);
                 pvalues.addAll(m.accepted);
@@ -215,6 +224,7 @@ public class PaxosServer extends Node {
     private void handlePreemptedMessage(PreemptedMessage m, Address sender){
         if(ballot.compareTo(m.ballot) < 0){
             ballot = new Ballot(m.ballot.sequenceNum() + 1, this.address());
+            leader = ballot.address();
             P1aMessage m1 = new P1aMessage(this.address(), ballot);
             for(Address a : leaders){
                 send(m1,a);
@@ -233,41 +243,48 @@ public class PaxosServer extends Node {
     }
 
     private void handleP2bMessage(P2bMessage m, Address sender){
+        if (ballot.equals(m.ballot())) {
+            waitfor.remove(m.address);
+        }else{
+            send(new PreemptedMessage(this.address(), m.ballot), ballot.address());
+            return;
+        }
         if(2*waitfor.size() >= leaders.length) {
-            if (ballot.equals(m.ballot())) {
-                waitfor.remove(m.address);
-            }else{
-                send(new PreemptedMessage(this.address(), m.ballot), ballot.address());
-                return;
-            }
             for(Address address: leaders){
-                send(new DecisionMessage(this.address(),slot,m.paxosRequest()),address);
+                if(!decisions.containsValue(m.paxosRequest)){
+                    send(new DecisionMessage(this.address(),slot,m.paxosRequest()),address);
+                }
             }
         }
     }
 
     private void handleDecisionMessage(DecisionMessage m, Address sender){
-        decisions.put(m.slot, m.paxosRequest);
-        for(;;){
-            PaxosRequest c = decisions.get(slot);
-            if(c == null){
-                break;
+        if(leader.equals(this.address())){
+            decisions.put(m.slot, m.paxosRequest);
+            for(;;){
+                PaxosRequest c = decisions.get(slot);
+                if(c == null){
+                    break;
+                }
+                PaxosRequest c2 = proposals.get(slot);
+                if(c2 != null && !c2.equals(c)){
+                    propose(c2);
+                }
+                perform(c);
+                if(slot > slotDone){
+                    AMOCommand amoCommand = new AMOCommand(c.command(), sender, c.sequenceNum());
+                    AMOResult amoResult = (AMOResult) app.execute(amoCommand);
+                    send(new PaxosReply(this.address().toString(), c.sequenceNum(), amoResult), clientAddress);
+                    slotDone = slot;
+                }
             }
-            PaxosRequest c2 = proposals.get(slot);
-            if(c2 != null && !c2.equals(c)){
-                propose(c2);
-            }
-            perform(c);
         }
     }
 
     private void perform(PaxosRequest paxosRequest){
-        for(int s = 1; s<=slot;s++){
+        for(int s = 1; s<slot;s++){
             if(paxosRequest.equals(decisions.get(s))){
                 slot++;
-                AMOCommand amoCommand = new AMOCommand(paxosRequest.command(),clientAddress, paxosRequest.sequenceNum());
-                AMOResult amoResult = (AMOResult) app.execute(amoCommand);
-                send(new PaxosReply(this.address().toString(), paxosRequest.sequenceNum(), amoResult),clientAddress);
                 return;
             }
         }
@@ -279,6 +296,8 @@ public class PaxosServer extends Node {
             Map<Integer, Ballot> max = new HashMap<>();
             for(Pvalue pv: m.accepted){
                 Ballot ballot = max.get(pv.slot_num());
+                if(ballot != null)
+                    leader = ballot.address();
                 if(ballot == null || ballot.compareTo(pv.ballot()) < 0){
                     max.put(pv.slot_num(), pv.ballot());
                     proposals.put(pv.slot_num(), pv.paxosRequest());
@@ -296,13 +315,52 @@ public class PaxosServer extends Node {
         }
     }
 
-    private void handleAcceptor(PaxosRequest m, Address serverAddress) {
+    private void handleHeartbeat(Heartbeat m, Address sender) {
+        if(!this.address().equals(m.ballot().address())){
+            send(new HeartbeatReply(slot, m.ballot()), sender);
+            for(int i = 1; i<m.slotExecuted();i++){
+                decisions.put(i, null);
+            }
+        }
+    }
+
+    private void handleHeartbeatReply(HeartbeatReply m, Address sender) {
+        if(m.slot() > 1){
+            slotToDecisionMap.put(m.slot()-1, slotToDecisionMap.getOrDefault(m.slot()-1, 0) + 1);
+            if(2*slotToDecisionMap.get(m.slot()-1) >= leaders.length){
+                slotExecuted = m.slot();
+            }
+        }
     }
 
     /* -------------------------------------------------------------------------
         Timer Handlers
        -----------------------------------------------------------------------*/
     // TODO: your time handlers ...
+    private synchronized void onHeartbeatCheckTimer(HeartbeatCheckTimer t) {
+        // TODO: handle client request timeout ...
+        if (!t.leader().equals(ballot.address())) {
+            countOfRequests++;
+            if(countOfRequests == 2){
+                send(new P1aMessage(this.address(), new Ballot(ballot.sequenceNum() + 1, this.address())), ballot.address());
+                countOfRequests = 0;
+                return;
+            }
+            set(new HeartbeatCheckTimer(t.leader()), HeartbeatCheckTimer.PING_CHECK_MILLIS);
+        }
+    }
+
+    private void onHeartbeatTimer(HeartbeatTimer t) {
+        // TODO: handle client request timeout ...
+        if (this.address().equals(ballot.address())) {
+            for(Address address: leaders){
+                if(!address.equals(this.address())){
+                    send(new Heartbeat(ballot, slotExecuted), address);
+                }
+            }
+            set(new HeartbeatTimer(), HeartbeatTimer.HEARTBEAT_MILLIS);
+        }
+    }
 
 
     /* -------------------------------------------------------------------------
